@@ -31,6 +31,13 @@
 /* Create a WiFi access point and provide a web server on it.
   allow change of extenders name
   allow change of connected network
+  add timeout for connection then activate webserver
+  add ota?
+
+  test timeout
+  write code workflow and comment
+  add readme,discription to github
+  youtube video and article maybe
 
 */
 
@@ -60,10 +67,6 @@ DynamicJsonDocument Config(2048);
 
 #define HAVE_NETDUMP 0
 
-#ifndef STASSID
-#define STASSID "Anurella"
-#define STAPSK  "G15dislove."
-#endif
 
 #include <ESP8266WiFi.h>
 #include <lwip/napt.h>
@@ -95,7 +98,7 @@ class wifi {
 
   public:
 
-  JsonObject obj = Config.as<JsonObject>();
+    JsonObject obj = Config.as<JsonObject>();
 
     // just added this so i can see the files in the file system
     void listDir(const char * dirname) {
@@ -162,7 +165,7 @@ class wifi {
       // Send a GET request to <IP>/get?message=<message>
       server.on("/credentials", HTTP_GET, [] (AsyncWebServerRequest * request) {
         String param = "ssid";
-        
+
         if (request->hasParam(param)) {
           String ssid = request->getParam(param)->value();
           Config["ssid"] = ssid;
@@ -199,7 +202,7 @@ class wifi {
         File file = LittleFS.open(path, "w");
         if (!file) {
           Serial.println("Failed to open file for writing");
-          return;
+          return "null";
         }
         if (file.print(output)) {
           Serial.println("File written");
@@ -207,6 +210,7 @@ class wifi {
           Serial.println("Write failed");
         }
         file.close();
+        ESP.restart();
 
       });
 
@@ -215,17 +219,20 @@ class wifi {
     }
 
 
-    String* get_credentials() {
+
+    String get_credentials(int a) {
+      // a: 0=ssid, 1=pass; 2=ap name
       String path = "/config.json";
       String credentials = "";
-    
+
       Serial.print("reading file ");
       Serial.println(path);
 
       File file = LittleFS.open(path, "r");
       if (!file) {
         Serial.println("Failed to open file for reading");
-        return {};
+        Serial.println("this is probally first usage, so the file does not exist");
+        return "null";
       }
 
       Serial.print("Read from file: ");
@@ -234,26 +241,15 @@ class wifi {
 
       }
       Serial.println(credentials);
-      deserializeJson(Config,credentials);
+      deserializeJson(Config, credentials);
       file.close();
-     
-        String credential[3]= {Config["ssid"],Config["pass"],Config["ap"]};
-      return credential;
+      String credential_array [3] = {Config["ssid"], Config["pass"], Config["ap"]};
+      return credential_array[a];
     }
-
-
-
 
 };
 
 wifi my_wifi;
-
-const char *ssid = STASSID;
-const char *password = STAPSK;
-
-
-
-
 
 
 void setup() {
@@ -263,10 +259,6 @@ void setup() {
 
   Serial.println();
 
-
-  IPAddress myIP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(myIP);
   if (!LittleFS.begin()) {
     Serial.println("LittleFS mount failed");
     return;
@@ -280,44 +272,69 @@ void setup() {
 #endif
 
   // first, connect to STA so we can get a proper local DNS server
-  Serial.println(my_wifi.get_credentials()[0]);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(STASSID, STAPSK);
-  while (WiFi.status() != WL_CONNECTED) {
-    Serial.print('.');
-    delay(500);
+
+
+  String ssid = my_wifi.get_credentials(0); // if the file does not exist the function will always return null
+  String pass = my_wifi.get_credentials(1);
+  String ap= my_wifi.get_credentials(2);
+
+  if (ssid == "null") {
+start_webserver:
+    IPAddress myIP = WiFi.softAPIP();
+    Serial.print("AP IP address: ");
+    Serial.println(myIP);
+    WiFi.softAP("Pius Electronics extender0001");
+    Serial.printf("AP: %s\n", WiFi.softAPIP().toString().c_str());
+    my_wifi.create_server();
+    server.begin();
+    Serial.println("HTTP server started");
   }
-  Serial.printf("\nSTA: %s (dns: %s / %s)\n",
-                WiFi.localIP().toString().c_str(),
-                WiFi.dnsIP(0).toString().c_str(),
-                WiFi.dnsIP(1).toString().c_str());
+  else {
+    WiFi.mode(WIFI_STA);
+    WiFi.begin(ssid, pass); // check function to understand
+    int timeout_counter=0;
+    while (WiFi.status() != WL_CONNECTED) {
+      if(timeout_counter>=120){
+        goto start_webserver;
+      }
+      Serial.print('.');
+      timeout_counter++;
+      delay(500);
+    }
 
-  // give DNS servers to AP side
-  dhcpSoftAP.dhcps_set_dns(0, WiFi.dnsIP(0));
-  dhcpSoftAP.dhcps_set_dns(1, WiFi.dnsIP(1));
 
-  WiFi.softAPConfig(  // enable AP, with android-compatible google domain
-    IPAddress(172, 217, 28, 254),
-    IPAddress(172, 217, 28, 254),
-    IPAddress(255, 255, 255, 0));
-  WiFi.softAP(STASSID "extender", STAPSK);
-  Serial.printf("AP: %s\n", WiFi.softAPIP().toString().c_str());
 
-  Serial.printf("Heap before: %d\n", ESP.getFreeHeap());
-  err_t ret = ip_napt_init(NAPT, NAPT_PORT);
-  Serial.printf("ip_napt_init(%d,%d): ret=%d (OK=%d)\n", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
-  if (ret == ERR_OK) {
-    ret = ip_napt_enable_no(SOFTAP_IF, 1);
-    Serial.printf("ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)\n", (int)ret, (int)ERR_OK);
+    Serial.printf("\nSTA: %s (dns: %s / %s)\n",
+                  WiFi.localIP().toString().c_str(),
+                  WiFi.dnsIP(0).toString().c_str(),
+                  WiFi.dnsIP(1).toString().c_str());
+
+    // give DNS servers to AP side
+    dhcpSoftAP.dhcps_set_dns(0, WiFi.dnsIP(0));
+    dhcpSoftAP.dhcps_set_dns(1, WiFi.dnsIP(1));
+
+    WiFi.softAPConfig(  // enable AP, with android-compatible google domain
+      IPAddress(172, 217, 28, 254),
+      IPAddress(172, 217, 28, 254),
+      IPAddress(255, 255, 255, 0));
+    WiFi.softAP(ap, pass);
+    Serial.printf("AP: %s\n", WiFi.softAPIP().toString().c_str());
+
+    Serial.printf("Heap before: %d\n", ESP.getFreeHeap());
+    err_t ret = ip_napt_init(NAPT, NAPT_PORT);
+    Serial.printf("ip_napt_init(%d,%d): ret=%d (OK=%d)\n", NAPT, NAPT_PORT, (int)ret, (int)ERR_OK);
     if (ret == ERR_OK) {
-      Serial.printf("WiFi Network '%s' with same password is now NATed behind '%s'\n", STASSID "extender", STASSID);
+      ret = ip_napt_enable_no(SOFTAP_IF, 1);
+      Serial.printf("ip_napt_enable_no(SOFTAP_IF): ret=%d (OK=%d)\n", (int)ret, (int)ERR_OK);
+      if (ret == ERR_OK) {
+        Serial.printf("Successfully NATed to WiFi Network '%s' with the same password", ssid.c_str());
+      }
+    }
+    Serial.printf("Heap after napt init: %d\n", ESP.getFreeHeap());
+    if (ret != ERR_OK) {
+      Serial.printf("NAPT initialization failed\n");
     }
   }
-  Serial.printf("Heap after napt init: %d\n", ESP.getFreeHeap());
-  if (ret != ERR_OK) {
-    Serial.printf("NAPT initialization failed\n");
-  }
-
 }
 
 #else
