@@ -29,12 +29,10 @@
 */
 
 /* Create a WiFi access point and provide a web server on it.
-  allow change of extenders name
-  allow change of connected network
-  add timeout for connection then activate webserver
+  add led blink sequence to serve as indicator for various stages it is ar
+  write a manual
   add ota?
 
-  test timeout
   write code workflow and comment
   add readme,discription to github
   youtube video and article maybe
@@ -151,11 +149,12 @@ class wifi {
         String html = "<!DOCTYPE html><html>";
         html += "<body>";
         html += "<h1>Pius Electronics Extender Config page</h1>";
+        html += "<p>Refresh to scan </p>";
         html += "<p>networks found </p>";
         html += "<form action=\"/credentials\">";
         html += "<p>Please select a WiFi network:</p>" + network_html;
-        html += "<input type=\"password\" id=\"pass\" name=\"pass\" value=\"password\" required ><label for=\"pass\">password</label><br><br>";
-        html += "<input type=\"text\" id=\"ap\" name=\"ap\" value=\"PiusElectronics Extender\" required ><label for=\"ap\">A.P name:</label><br>";
+        html += "<input type=\"password\" id=\"pass\" name=\"pass\" value=\"\" required ><label for=\"pass\">password</label><br><br>";
+        html += "<input type=\"text\" id=\"ap\" name=\"ap\" value=\"\" required ><label for=\"ap\">A.P name:</label><br>";
         html += "<input type=\"submit\" value=\"Submit\">";
         html += "</form></body></html>";
 
@@ -254,7 +253,8 @@ wifi my_wifi;
 
 void setup() {
   delay(1000);
-
+ pinMode(0,INPUT_PULLUP);
+ pinMode(16,OUTPUT);
   Serial.begin(115200);
 
   Serial.println();
@@ -283,7 +283,7 @@ start_webserver:
     IPAddress myIP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
     Serial.println(myIP);
-    WiFi.softAP("Pius Electronics extender0001");
+    WiFi.softAP("Pius_Electronics_extender0001");
     Serial.printf("AP: %s\n", WiFi.softAPIP().toString().c_str());
     my_wifi.create_server();
     server.begin();
@@ -351,4 +351,8 @@ void setup() {
 #endif
 
 void loop() {
+  if(digitalRead(0)==LOW){
+    LittleFS.format();
+    ESP.restart();
+  }
 }
