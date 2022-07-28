@@ -91,7 +91,13 @@ void dump(int netif_idx, const char* data, size_t len, int out, int success) {
 }
 #endif
 
-
+int ledState = LOW;
+unsigned long previousMillis = 0;
+long delay_time=0;
+// blink every 200ms if connected to router
+// blink every 1sec if web server is active
+// led is off is there is an error with the repeater
+//led is on when trying to connect to router.
 class wifi {
 
   public:
@@ -248,13 +254,16 @@ class wifi {
 
 };
 
+
+
 wifi my_wifi;
 
 
 void setup() {
   delay(1000);
  pinMode(0,INPUT_PULLUP);
- pinMode(16,OUTPUT);
+ pinMode(LED_BUILTIN,OUTPUT);
+ digitalWrite(LED_BUILTIN,1); //active low
   Serial.begin(115200);
 
   Serial.println();
@@ -288,6 +297,7 @@ start_webserver:
     my_wifi.create_server();
     server.begin();
     Serial.println("HTTP server started");
+    delay_time=1000; // blink every sec if webserver is active
   }
   else {
     WiFi.mode(WIFI_STA);
@@ -297,8 +307,10 @@ start_webserver:
       if(timeout_counter>=120){
         goto start_webserver;
       }
+
       Serial.print('.');
       timeout_counter++;
+      digitalWrite(LED_BUILTIN,0);// leaave led on when trying to connect
       delay(500);
     }
 
@@ -334,6 +346,7 @@ start_webserver:
     if (ret != ERR_OK) {
       Serial.printf("NAPT initialization failed\n");
     }
+    delay_time=200; // blink every half second if connection was succesfull
   }
 }
 
@@ -342,10 +355,7 @@ start_webserver:
 void setup() {
   Serial.begin(115200);
   Serial.printf("\n\nNAPT not supported in this configuration\n");
-  my_wifi.create_server();
-  server.begin();
-  Serial.println("HTTP server started");
-
+  delay_time=0; // leave led on if there is an error with the repeater
 }
 
 #endif
@@ -354,5 +364,21 @@ void loop() {
   if(digitalRead(0)==LOW){
     LittleFS.format();
     ESP.restart();
+  }
+ unsigned long currentMillis = millis();
+
+  if (currentMillis - previousMillis >= delay_time) {
+    // save the last time you blinked the LED
+    previousMillis = currentMillis;
+
+    // if the LED is off turn it on and vice-versa:
+    if (ledState == LOW) {
+      ledState = HIGH;
+    } else {
+      ledState = LOW;
+    }
+
+    // set the LED with the ledState of the variable:
+    digitalWrite(LED_BUILTIN, ledState);
   }
 }
