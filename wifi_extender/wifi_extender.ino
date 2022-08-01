@@ -28,26 +28,14 @@
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-/* Create a WiFi access point and provide a web server on it.
-  add led blink sequence to serve as indicator for various stages it is ar
-  write a manual
-  add ota?
-
-  write code workflow and comment
-  add readme,discription to github
-  youtube video and article maybe
-
-*/
-
-#include <Arduino.h>
-#ifdef ESP32
-#include <WiFi.h>
-#include <AsyncTCP.h>
-#elif defined(ESP8266)
+/* 
+ *  Author: Pius Onyema Ndukwu
+ *  License: MIT License
+ *  GitHub:
+ */
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESPAsyncTCP.h>
-#endif
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <FS.h>
@@ -57,6 +45,15 @@ AsyncWebServer server(80);
 DynamicJsonDocument Config(2048);
 
 
+// variables
+bool RepeaterIsWorking= true;
+int ledState = LOW; 
+unsigned long previousMillis = 0;
+long delay_time=0; // interval between blinks
+// blink every 200ms if connected to router
+// blink every 1sec if web server is active
+// led is off is there is an error with the repeater
+//led is on when trying to connect to router.
 
 
 /* Set these to your desired credentials. */
@@ -78,6 +75,7 @@ DynamicJsonDocument Config(2048);
 
 #include <NetDump.h>
 
+
 void dump(int netif_idx, const char* data, size_t len, int out, int success) {
   (void)success;
   Serial.print(out ? F("out ") : F(" in "));
@@ -91,13 +89,7 @@ void dump(int netif_idx, const char* data, size_t len, int out, int success) {
 }
 #endif
 
-int ledState = LOW;
-unsigned long previousMillis = 0;
-long delay_time=0;
-// blink every 200ms if connected to router
-// blink every 1sec if web server is active
-// led is off is there is an error with the repeater
-//led is on when trying to connect to router.
+
 class wifi {
 
   public:
@@ -138,7 +130,7 @@ class wifi {
           for (int i = 0; i < n; ++i) {
             String router = WiFi.SSID(i);
             Serial.println(router);
-            network_html += "<input type=\"radio\" id=\"html\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "</label><br>";
+            network_html += "<input type=\"radio\" id=\"#radiobuttonex\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "</label><<br>";
 
           }
           WiFi.scanDelete();
@@ -146,16 +138,15 @@ class wifi {
             WiFi.scanNetworks(true);
           }
         }
-        //        for (int i = 0; i < n; i++) {
-        //          String router = WiFi.SSID(i);
-        //          Serial.println(router);
-        //          network_html += "<input type=\"radio\" id=\"html\" name=\"ssid\" value=" + router + " required ><label for=\"html\">" + router + "</label><br>";
-        //        }
 
         String html = "<!DOCTYPE html><html>";
+        html+= "<head>";
+        html+=" <link rel=\"stylesheet\" href=\"styles.css\">";
+        html+= "</head>";
         html += "<body>";
+        html+= "<div>";
         html += "<h1>Pius Electronics Extender Config page</h1>";
-        html += "<p>Refresh to scan </p>";
+        html += "<button onclick=\"window.location.href='/';\">Scan </button>";
         html += "<p>networks found </p>";
         html += "<form action=\"/credentials\">";
         html += "<p>Please select a WiFi network:</p>" + network_html;
@@ -163,11 +154,27 @@ class wifi {
         html += "<input type=\"text\" id=\"ap\" name=\"ap\" value=\"\" required ><label for=\"ap\">A.P name:</label><br>";
         html += "<input type=\"submit\" value=\"Submit\">";
         html += "</form></body></html>";
+        html+= "</div>";
 
         request->send(200, "text/html", html);
       });
 
-      // Send a GET request to <IP>/get?message=<message>
+// css style from grepper
+      server.on("/styles.css", HTTP_GET, [](AsyncWebServerRequest * request) {
+        String style = "#radiobuttonex{\n"
+"  border: 2px solid rgb(255,1,199);\n"
+"  text-align: center;\n"
+"  font-family: sans serif;\n"
+"  width: 305px;\n"
+"  background: rgb(50,50,100);\n"
+"  border-radius: 40px;\n"
+"}";
+        
+       request->send(200, "text/css", style);
+        
+        });
+
+      // Send a GET request to <IP>/get?message=<message> 
       server.on("/credentials", HTTP_GET, [] (AsyncWebServerRequest * request) {
         String param = "ssid";
 
@@ -215,11 +222,8 @@ class wifi {
           Serial.println("Write failed");
         }
         file.close();
-        ESP.restart();
 
       });
-
-
 
     }
 
@@ -287,7 +291,7 @@ void setup() {
   String pass = my_wifi.get_credentials(1);
   String ap= my_wifi.get_credentials(2);
 
-  if (ssid == "null") {
+  if (ssid == "null") { // if the file does not exist ssid will be null
 start_webserver:
     IPAddress myIP = WiFi.softAPIP();
     Serial.print("AP IP address: ");
@@ -305,12 +309,12 @@ start_webserver:
     int timeout_counter=0;
     while (WiFi.status() != WL_CONNECTED) {
       if(timeout_counter>=120){
-        goto start_webserver;
+        goto start_webserver; // if it fails to connect start_webserver
       }
 
       Serial.print('.');
       timeout_counter++;
-      digitalWrite(LED_BUILTIN,0);// leaave led on when trying to connect
+      digitalWrite(LED_BUILTIN,0);// leave led on when trying to connect
       delay(500);
     }
 
@@ -348,6 +352,7 @@ start_webserver:
     }
     delay_time=200; // blink every half second if connection was succesfull
   }
+  RepeaterIsWorking=true;
 }
 
 #else
@@ -355,7 +360,8 @@ start_webserver:
 void setup() {
   Serial.begin(115200);
   Serial.printf("\n\nNAPT not supported in this configuration\n");
-  delay_time=0; // leave led on if there is an error with the repeater
+  RepeaterIsWorking= false;
+  digitalWrite(LED_BUILTIN,1); // led stays off
 }
 
 #endif
@@ -365,6 +371,8 @@ void loop() {
     LittleFS.format();
     ESP.restart();
   }
+
+  while(RepeaterIsWorking){
  unsigned long currentMillis = millis();
 
   if (currentMillis - previousMillis >= delay_time) {
@@ -381,4 +389,6 @@ void loop() {
     // set the LED with the ledState of the variable:
     digitalWrite(LED_BUILTIN, ledState);
   }
+  break;
+}
 }
