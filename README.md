@@ -62,7 +62,8 @@ I repeated this test twice which gave me roughly 80% speed drop. The good thing 
 ## Setting things up from the web interface
 The default IP address for the device is 192.168.4.1, during the first run of the device the config file( a file containing the details of the router to connect to) does not exist, so it start the web server ( the led blinks every one second to indicate this), the default name for the device is _Pius_Electronics_extender0001_ connect to the WiFi network and type in the IP address in your browser you will be be greeted by the web page.
 
-![web page](https://dev-to-uploads.s3.amazonaws.com/uploads/articles/t97k3ss711aqk228t66m.png)
+![Image](https://dev-to-uploads.s3.amazonaws.com/uploads/articles/7v1iiozqoatcbt7gniin.png)
+ 
 
 Click on the scan button to scan for network select the network(router) you want to connect to input the password(router's password) and type in the name you want the extender to have in the text box labelled AP name,and click submit.The extender will have the same password as the router it is connected to. If the led starts blinking at a fast rate (200ms) this means the connection is successful, you can now connect to the extender and use it.
 
